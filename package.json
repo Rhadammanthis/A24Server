@@ -10,7 +10,9 @@
   "license": "ISC",
   "dependencies": {
     "async": "^2.1.5",
+    "axios": "^0.16.2",
     "body-parser": "~1.0.1",
+    "cheerio": "^1.0.0-rc.2",
     "express": "~4.0.0",
     "firebase": "^4.0.0",
     "jsdom": "^9.12.0",

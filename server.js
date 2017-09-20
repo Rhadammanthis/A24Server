@@ -6,6 +6,7 @@ var firebase = require("firebase")
 var bodyParser = require('body-parser');
 var schedule = require('node-schedule');
 var lassoImage = require('lasso-image');
+var axios = require('axios');
 
 // call the packages we need
 var express = require('express');        // call express
@@ -54,6 +55,18 @@ router.get('/getImageDetails', (req, res) => {
     }
 
     img.src = 'https://s-media-cache-ak0.pinimg.com/736x/4d/d2/e1/4dd2e10df65ee3e72d548cc7f8fc99ac--superman-vs-batman-dawn-of-justice.jpg';
+});
+
+router.get('/lol', (req, res) => {
+
+    res.send({'response': 'ok!'});
+
+});
+
+router.get('/ver', (req, res) => {
+    
+    res.json({'version': 'Hateful 8 - 4'});
+    
 });
 
 router.get('/parseFilmInfo', (req, res) => {
@@ -150,7 +163,7 @@ router.get('/parseFilmInfo', (req, res) => {
                         .set(data)
                         .then(() => {
                             console.log(data)
-                            res.send(data)
+                            res.set('Access-Control-Allow-Origin', '*').status(200).json(data)
                         });
                 }
             })
@@ -174,6 +187,7 @@ router.post('/parse-film', (req, res) => {
             film.videos = []
             film.credits = []
             film.otherMedia = [];
+            film.posters = [];
             film.instagram = [];
             film.headlines = [];
             film.reviews = [];
@@ -211,6 +225,15 @@ router.post('/parse-film', (req, res) => {
                 })
             });
 
+            $('figure', 'li.poster').each((i, elem) => {
+                var obj = cheerio.load($(elem).html())
+                film.posters.push({
+                    imgURL: obj('img').attr('src'),
+                    imgWidth: obj('img').attr('data-width'),
+                    imgHeight: obj('img').attr('data-height')
+                })
+            });
+
             $('figure', '.block.film-media-block.image').each((i, elem) => {
                 var obj = cheerio.load($(elem).html())
                 film.otherMedia.push({
@@ -223,6 +246,7 @@ router.post('/parse-film', (req, res) => {
                 var obj = cheerio.load($(elem).html())
                 film.instagram.push({
                     handle: obj('a').attr('href'),
+                    link: $(elem).children('a').attr('href'),
                     media: obj('img').attr('src'),
                     caption: obj('p').text()
                 })
@@ -252,8 +276,14 @@ router.post('/parse-film', (req, res) => {
 
             $('.block-content', '.block.film-media-block.website ').each((i, elem) => {
                 var obj = cheerio.load($(elem).html())
+
+                var parsedLink = obj('a').attr('href')
+                
+                if(parsedLink.indexOf('http') == -1)
+                    parsedLink = 'http' + '://' + parsedLink;
+
                 film.websites.push({
-                    link: obj('a').attr('href'),
+                    link: parsedLink,
                     image: obj('img').attr('src')
                 })
             });
@@ -274,9 +304,60 @@ router.post('/parse-film', (req, res) => {
                 })
             });
 
-            console.log('Ready to send: ', film.title)
+            $('ul.slides').find('li.slide.video').each((i, elem) => {
+                
+                var videoId = $(elem).attr('data-video-id');
 
-            res.send(clean(film))
+                if(videoId.indexOf('http') !== -1)
+                    videoId = videoId.slice(17)
+
+                var videoData = {}
+
+                var url = 'https://www.googleapis.com/youtube/v3/videos?id=' + videoId + '&part=snippet&key=AIzaSyBHlMVZVuhFNr4Hg5Li3Ked2qutAEFrdDo'
+
+                var fetchVideoData = ({ url, videoId }, callback) => {
+
+                    if (videoId) {
+                        axios.get(url)
+                            .then(function (response) {
+                                var parsedJSON = response.data
+
+                                if (parsedJSON.items[0]) {
+
+                                    var item = parsedJSON.items[0];
+
+                                    videoData.id = item.id
+                                    videoData.thumbNailURL = item.snippet.thumbnails.medium.url
+                                    videoData.title = item.snippet.title
+
+                                    callback(null, videoData)
+                                }
+                            })
+                            .catch(function (error) {
+                                callback(error)
+                            });
+                    }
+                    else
+                        callback(null, null)
+
+                }
+
+                fetchVideoData({ url, videoId }, (error, result) => {
+                    
+                    if(error === null){
+                        film.trailers = []
+                        film.trailers.push(result)
+
+                        console.log('Sending ' + film.title)
+    
+                        res.send(clean(film))
+                    }
+                    else
+                        res.send(null).end()
+                    
+                })
+
+            });
         }
     });
 })
